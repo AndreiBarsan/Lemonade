@@ -1,5 +1,6 @@
 package com.siegedog.lemonade;
 
+import com.badlogic.gdx.Gdx;
 import com.siegedog.egglib.EggGame;
 import com.siegedog.egglib.GameScreen;
 import com.siegedog.egglib.PreloadingScreen;
@@ -11,7 +12,7 @@ import com.siegedog.lemonade.screens.LemonadeMenu;
 public class LemonadeGame extends EggGame {
 
 	@Override
-	protected void startup() {
+	protected void startup() {		
 		GameScreen next = new LemonadeMenu();
 		LoadTask loadTask = new LoadTask() {
 			
