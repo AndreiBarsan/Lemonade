@@ -6,8 +6,8 @@ import java.util.List;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.Input.Keys;
+import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.graphics.Camera;
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.BitmapFont.HAlignment;
@@ -15,6 +15,7 @@ import com.badlogic.gdx.math.Interpolation;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Action;
 import com.badlogic.gdx.scenes.scene2d.actions.Actions;
+import com.siegedog.egglib.Doodad;
 import com.siegedog.egglib.Dude;
 import com.siegedog.egglib.EggGame;
 import com.siegedog.egglib.GameScreen;
@@ -23,10 +24,21 @@ import com.siegedog.egglib.juice.UIFLabel;
 import com.siegedog.egglib.juice.UIFLabel.Fade;
 import com.siegedog.egglib.physics.PointShape;
 import com.siegedog.egglib.util.Log;
+import com.siegedog.lemonade.data.Waves;
+import com.siegedog.lemonade.entities.MoleSlayer;
+import com.siegedog.lemonade.entities.Moleman;
+import com.siegedog.lemonade.menu.Menu;
+import com.siegedog.lemonade.menu.MenuAction;
+import com.siegedog.lemonade.menu.MenuEntry;
 
-public class LemonadeMenu extends GameScreen {
+/**
+ * Most of the game happens in this screen, in order to facilitate fancy transitions
+ * e.g. from menu to gameplay.
+ *
+ */
+public class MoleGame extends GameScreen {
 	
-	private static final String UI_LAYER = "ui";
+	public static final String UI_LAYER = "ui";
 	
 	public enum State {
 		/** Shows the "press any key" message */
@@ -39,6 +51,8 @@ public class LemonadeMenu extends GameScreen {
 		PreWave,
 		/** Enemies are spawned and the player fights them off */
 		Gameplay,
+		/** The player is within a level, but he paused the game */
+		Paused,
 		/** The player beat a wave - show him stats and the store */
 		PostWave,
 		/** After a level is done. Maybe not needed. */
@@ -60,140 +74,34 @@ public class LemonadeMenu extends GameScreen {
 	
 	private UIFLabel anyKey;
 	
-	public interface MenuAction {
-		public void invoke();
-	}
-	
-	public class MenuEntry {
-		
-		public UIFLabel label;
-		public MenuAction action;
-		private String text;
-		private GameScreen screen;
-		
-		public MenuEntry(GameScreen screen, String text, MenuAction action) {
-			this.screen = screen;
-			this.action = action;
-			this.text = text;
-		}
-		
-		public void init(BitmapFont font, Vector2 relativePosition, float width, float fadeInTime, float fadeOutTime) {
-			System.out.println(relativePosition);
-			label = new UIFLabel(text, font, relativePosition, width, fadeInTime, fadeOutTime);
-			screen.addDude(UI_LAYER, label);
-		}
-
-		public void selected() {
-			label.setColor(Color.YELLOW);
-		}
-		
-		public void deselected() {
-			label.setColor(Color.WHITE);
-		}
-		
-		public void activated() {
-			action.invoke();
-		}
-
-		public void show() {
-			label.show();
-		}
-		
-		public void hide() {
-			label.hide();
-		}
-	}
-	
-	public class Menu extends InputAdapter {
-		public List<MenuEntry> entries;
-		
-		private int index = 0;
-		private BitmapFont font;
-		private int entryHeight;
-		private int width;
-		
-		/**
-		 * Entry 0 is selected by default.
-		 */
-		public Menu(Vector2 position, BitmapFont font, int width, int entryHeight, List<MenuEntry> entries) {
-			this.entries = entries;
-			this.font = font;
-			this.width = width;
-			this.entryHeight = entryHeight;
-			
-			Vector2 cpos = new Vector2(position);
-			
-			for(MenuEntry me : entries) {
-				me.init(font, new Vector2(cpos), width, 0.5f, 0.5f);
-				cpos.y -= entryHeight;
-			}
-			
-			entries.get(0).selected();
-		}
-
-		@Override
+	private InputProcessor splashInputHandler = new InputAdapter() {
 		public boolean keyUp(int keycode) {
-			switch(keycode) {
-			case Keys.UP:
-				entries.get(index).deselected();
-				
-				index -= 1;
-				if(index < 0) {
-					index = entries.size() - 1;
-				}
-				
-				entries.get(index).selected();
-				
-				return true;
-				
-			case Keys.DOWN:
-				entries.get(index).deselected();	
-				
-				index += 1;
-				if(index >= entries.size()) {
-					index = 0;
-				}
-				
-				entries.get(index).selected();
-				
-				return true;
-				
-			case Keys.A:
-			case Keys.SPACE:
-			case Keys.ENTER:
-				entries.get(index).activated();
-			}
-			
-			return false;			
-		}
-		
-		protected void show() {
-			for(MenuEntry me : entries) {
-				me.show();
-			}
-		}
-		
-		protected void hide() {
-			for(MenuEntry me : entries) {
-				me.hide();
-			}
-		}
-		
-		public void activate() {
-			Gdx.input.setInputProcessor(this);
-			show();
-		}
-		
-		public void deactivate() {
-			Gdx.input.setInputProcessor(null);
-			hide();
-		}
-	}
-	
-	InputAdapter splashInputHandler = new InputAdapter() {
-		public boolean keyUp(int keycode) {
-			LemonadeMenu.this.splashToMainMenu();
+			MoleGame.this.splashToMainMenu();
 			return true;
+		}
+	};
+	
+	/** Handles non-gameplay stuff. The player object just polls the device for
+	 * better responsiveness. Seriously. */
+	private InputProcessor gameplayInputHandler = new InputAdapter() {
+		public boolean keyUp(int keycode) {
+			if(keycode == Keys.ESCAPE) {
+				pauseGame();
+				return true;
+			}
+			
+			return false;
+		}
+	};
+	
+	private InputProcessor pausedInputHandler = new InputAdapter() {
+		public boolean keyUp(int key) {
+			if(key == Keys.SPACE || key == Keys.ENTER || key == Keys.ESCAPE) {
+				MoleGame.this.unpauseGame();
+				return true;
+			}
+			
+			return false;
 		}
 	};
 	
@@ -207,32 +115,47 @@ public class LemonadeMenu extends GameScreen {
 	private int currentWave;
 
 	private int score;
+
+	private Dude caveBackground;
+
+	private MoleSlayer player;
+
+	private BitmapFont splashFont;
+
+	private UIFLabel pauseLabel;
+
+	private UIFLabel pauseInfo;
+	
 	
 	@Override
 	public void init(EggGame game) {
 		super.init(game, 2);
 		super.resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
 		
-		prepareLayers("gameplay", "ui");
+		prepareLayers("background", "gameplay", "gameplay-foreground", "ui");
 		
 		menuFont = EggGame.R.font("menuFont");
+		splashFont = EggGame.R.font("splashFont");
 		
 		float width = Gdx.graphics.getWidth() / 2.0f;
 		float height = Gdx.graphics.getHeight() / 2.0f;
 		
 		int logoX = (int) ((width - EggGame.R.sprite("logo-rise").getWidth()) / 2.0f);
 		
-		addDude("ui", rise = new Dude(EggGame.R.spriteAsAnimatedSprite("logo-rise"), new PointShape(logoX, height - 220.0f)));
-		addDude("ui", molemen = new Dude(EggGame.R.spriteAsAnimatedSprite("logo-molemen"), new PointShape(logoX, height - 220.0f)));
+		addDude("background", caveBackground = new Doodad("cave", 0, -384));
+		
+		addDude("ui", rise = new Doodad("logo-rise", logoX, height - 220.0f));
+		addDude("ui", molemen = new Doodad("logo-molemen", logoX, height - 220.0f));
 		addDude("ui", anyKey = new UIFLabel("press the any key", menuFont, new Vector2(0.0f, height - 300.0f), width, 0.5f, 0.5f));
 		
 		addDude("ui", scoreLabel = new UIFLabel("", menuFont, new Vector2(10.0f, height - 5.0f), 200.0f, 0.3f, 0.3f));
 		addDude("ui", waveAndLevelLabel = new UIFLabel("", menuFont, new Vector2(width - 170.0f, height - 5.0f), 170.0f, 0.3f, 0.3f));
+		
+		addDude("ui", pauseLabel = new UIFLabel("Game paused", splashFont, new Vector2(0.0f, height - 150.0f), width, 0.2f, 0.2f));
+		addDude("ui", pauseInfo = new UIFLabel("Press Space or something to resume", menuFont, new Vector2(0.f, height - 200.0f), width, 1.2f, 0.2f));
 		scoreLabel.alignment = HAlignment.LEFT;
 		waveAndLevelLabel.alignment = HAlignment.RIGHT;
 		
-		rise.physics.interactive = false;
-		molemen.physics.interactive = false;
 		rise.addAction(Actions.fadeOut(0.0f));
 		molemen.addAction(Actions.fadeOut(0.0f));
 		
@@ -257,11 +180,11 @@ public class LemonadeMenu extends GameScreen {
 		}));
 		menu = new Menu(new Vector2(0, height - 180.0f), menuFont, (int) width, 40, entries);
 		
-		addDude("gameplay", walkway = new Dude(EggGame.R.spriteAsAnimatedSprite("walkway"), new PointShape(0.0f, -120.0f)));
+		addDude("gameplay-foreground", walkway = new Doodad("walkway", 0.0f, -120.0f));
 		
 		showSplash();
 	}
-	
+
 	/**
 	 * Shows the initial logo with the "press any key" prompt which leads to the menu.
 	 */
@@ -329,19 +252,69 @@ public class LemonadeMenu extends GameScreen {
 		));
 		
 		// Make menu vanish!
-		menu.hide();
+		menu.deactivate();
 	}
 	
 	private void newGame() {
+		// Initialize core game logic params 
 		currentLevel = 1;
 		currentWave = 1;
 		score = 0;
 		
+		// Show the HUD
 		scoreLabel.show();
 		waveAndLevelLabel.show();
 		
-		// Make the game know that we mean business
 		state = State.PreLevel;
+		// TODO: show wave/level number
+				
+		Gdx.input.setInputProcessor(gameplayInputHandler);
+		
+		addDude("gameplay", player = new MoleSlayer(100.0f, -105.0f));
+		
+		stage.addAction(Actions.delay(1.0f, new Action() {
+			public boolean act(float delta) {
+				startNextWave();
+				return true;
+			}
+		}));
+	}
+	
+	private void startNextWave() {
+		
+		// TODO: show wave number
+		
+		stage.addAction(Actions.delay(0.5f, new Action() {
+			public boolean act(float delta) {
+				startSpawning();
+				return true;
+			}
+		}));
+	}
+	
+	private void startSpawning() {
+		Waves.waves[currentLevel - 1][currentWave - 1].schedule(this);
+	}
+	
+	private void pauseGame() {
+		// TODO: freeze all enemies
+		player.pause();
+		pauseLabel.show();
+		pauseInfo.show();
+		state = State.Paused;
+		
+		Gdx.input.setInputProcessor(pausedInputHandler);
+	}
+	
+	private void unpauseGame() {
+		// TODO: unfreeze all enemies
+		player.unpause();
+		pauseLabel.hide();
+		pauseInfo.hide();
+		
+		state = State.Gameplay;
+		
+		Gdx.input.setInputProcessor(gameplayInputHandler);
 	}
 	
 	@Override
@@ -356,4 +329,7 @@ public class LemonadeMenu extends GameScreen {
 		scoreLabel.message = String.format("Score: %d", score);
 	}
 
+	public void spawnMole(Moleman moleman) {
+		addDude("gameplay", moleman);
+	}
 }
