@@ -62,18 +62,7 @@ public class MoleGame extends GameScreen {
 		/** Display a message and allow the player to return */
 		Credits
 	}
-	
-	private State state;
-	
-	private BitmapFont menuFont;
-	private Dude walkway;
-	private float elapsed;
-	
-	private Dude rise;
-	private Dude molemen;
-	
-	private UIFLabel anyKey;
-	
+
 	private InputProcessor splashInputHandler = new InputAdapter() {
 		public boolean keyUp(int keycode) {
 			MoleGame.this.splashToMainMenu();
@@ -105,34 +94,45 @@ public class MoleGame extends GameScreen {
 		}
 	};
 	
+	private State state;
+	private float elapsed;
+	
+	private BitmapFont menuFont;
+	private BitmapFont splashFont;
+
+	private Doodad walkway;
+	private Doodad rise;
+	private Doodad molemen;
+	private Doodad caveBackground;
+	
 	private Menu menu;
-
+	
+	private UIFLabel anyKey;
 	private UIFLabel waveAndLevelLabel;
-
 	private UIFLabel scoreLabel;
+	private UIFLabel pauseLabel;
+	private UIFLabel pauseInfo;
+	private UIFLabel waveSplash;
+	private UIFLabel levelSplash;
 	
 	private int currentLevel;
 	private int currentWave;
-
 	private int score;
-
-	private Dude caveBackground;
 
 	private MoleSlayer player;
 
-	private BitmapFont splashFont;
+	private int spawnedEnemies;
 
-	private UIFLabel pauseLabel;
+	private boolean spawning;
 
-	private UIFLabel pauseInfo;
-	
+	private int killedEnemies;
 	
 	@Override
 	public void init(EggGame game) {
 		super.init(game, 2);
 		super.resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
 		
-		prepareLayers("background", "gameplay", "gameplay-foreground", "ui");
+		prepareLayers("background", "molemen", "gameplay", "effects", "gameplay-foreground", "ui");
 		
 		menuFont = EggGame.R.font("menuFont");
 		splashFont = EggGame.R.font("splashFont");
@@ -146,19 +146,20 @@ public class MoleGame extends GameScreen {
 		
 		addDude("ui", rise = new Doodad("logo-rise", logoX, height - 220.0f));
 		addDude("ui", molemen = new Doodad("logo-molemen", logoX, height - 220.0f));
+		
 		addDude("ui", anyKey = new UIFLabel("press the any key", menuFont, new Vector2(0.0f, height - 300.0f), width, 0.5f, 0.5f));
 		
 		addDude("ui", scoreLabel = new UIFLabel("", menuFont, new Vector2(10.0f, height - 5.0f), 200.0f, 0.3f, 0.3f));
 		addDude("ui", waveAndLevelLabel = new UIFLabel("", menuFont, new Vector2(width - 170.0f, height - 5.0f), 170.0f, 0.3f, 0.3f));
-		
-		addDude("ui", pauseLabel = new UIFLabel("Game paused", splashFont, new Vector2(0.0f, height - 150.0f), width, 0.2f, 0.2f));
-		addDude("ui", pauseInfo = new UIFLabel("Press Space or something to resume", menuFont, new Vector2(0.f, height - 200.0f), width, 1.2f, 0.2f));
 		scoreLabel.alignment = HAlignment.LEFT;
 		waveAndLevelLabel.alignment = HAlignment.RIGHT;
 		
-		rise.addAction(Actions.fadeOut(0.0f));
-		molemen.addAction(Actions.fadeOut(0.0f));
+		addDude("ui", pauseLabel = new UIFLabel("Game paused", splashFont, new Vector2(0.0f, height - 150.0f), width, 0.2f, 0.2f));
+		addDude("ui", pauseInfo = new UIFLabel("Press Space or something to resume", menuFont, new Vector2(0.f, height - 200.0f), width, 1.2f, 0.2f));
 		
+		addDude("ui", levelSplash = new UIFLabel("", splashFont, new Vector2(0.0f, height - 150.0f), width, 0.8f, 0.8f));
+		addDude("ui", waveSplash = new UIFLabel("", splashFont, new Vector2(0.0f, height - 150.0f), width, 0.8f, 0.8f));
+				
 		List<MenuEntry> entries = new ArrayList<>();
 		entries.add(new MenuEntry(this, "Start", new MenuAction() {
 			@Override
@@ -178,7 +179,7 @@ public class MoleGame extends GameScreen {
 				Gdx.app.exit();
 			}
 		}));
-		menu = new Menu(new Vector2(0, height - 180.0f), menuFont, (int) width, 40, entries);
+		menu = new Menu(new Vector2(0, height - 160.0f), menuFont, (int) width, 40, entries);
 		
 		addDude("gameplay-foreground", walkway = new Doodad("walkway", 0.0f, -120.0f));
 		
@@ -193,12 +194,16 @@ public class MoleGame extends GameScreen {
 		
 		Gdx.input.setInputProcessor(splashInputHandler);
 		anyKey.show();
+		
+		rise.addAction(Actions.fadeOut(0.0f));
+		molemen.addAction(Actions.fadeOut(0.0f));
 		rise.addAction(Actions.delay(0.1f, Actions.fadeIn(0.33f)));
 		molemen.addAction(Actions.delay(0.9f, Actions.fadeIn(0.33f)));
 	}
 	
 	private void splashToMainMenu() {
 		// Hide splash prompt and shift logo above
+		Gdx.input.setInputProcessor(null);
 		anyKey.hide();
 		
 		rise.addAction(Actions.moveBy(0.0f, 50.0f, 0.50f, Interpolation.pow2));
@@ -218,6 +223,9 @@ public class MoleGame extends GameScreen {
 	 * Starts the game by "tilting" the camera downwards, into the cellar.
 	 */
 	private void descendIntoAbyss() {
+		// Make menu vanish!
+		menu.deactivate();
+		
 		// Tilt camera down
 		final Camera cam = stage.getCamera();
 		final float startY = cam.position.y;
@@ -250,42 +258,58 @@ public class MoleGame extends GameScreen {
 					
 				}
 		));
-		
-		// Make menu vanish!
-		menu.deactivate();
 	}
 	
 	private void newGame() {
 		// Initialize core game logic params 
-		currentLevel = 1;
-		currentWave = 1;
+		currentLevel = 0;
 		score = 0;
+		
+		startNextLevel();
+	}
+	
+	private void startNextLevel() {
+		currentLevel++;
+		currentWave = 1;
 		
 		// Show the HUD
 		scoreLabel.show();
 		waveAndLevelLabel.show();
 		
 		state = State.PreLevel;
-		// TODO: show wave/level number
+		levelSplash.message = "Level " + currentLevel;
+		levelSplash.show();
 				
 		Gdx.input.setInputProcessor(gameplayInputHandler);
 		
 		addDude("gameplay", player = new MoleSlayer(100.0f, -105.0f));
 		
-		stage.addAction(Actions.delay(1.0f, new Action() {
-			public boolean act(float delta) {
-				startNextWave();
-				return true;
-			}
-		}));
+		stage.addAction(Actions.sequence(
+				Actions.delay(2.5f),
+				new Action() {
+					public boolean act(float delta) {
+						levelSplash.hide();
+						return true;
+					}
+				},
+				Actions.delay(1.5f),
+				new Action() {
+					public boolean act(float delta) {
+						startNextWave();
+						return true;
+					}
+				}
+			));
 	}
 	
 	private void startNextWave() {
 		
-		// TODO: show wave number
+		waveSplash.message = "Wave " + currentWave;
+		waveSplash.show();
 		
-		stage.addAction(Actions.delay(0.5f, new Action() {
+		stage.addAction(Actions.delay(2.5f, new Action() {
 			public boolean act(float delta) {
+				waveSplash.hide();
 				startSpawning();
 				return true;
 			}
@@ -293,6 +317,9 @@ public class MoleGame extends GameScreen {
 	}
 	
 	private void startSpawning() {
+		spawning = true;
+		spawnedEnemies = 0;
+		killedEnemies = 0;
 		Waves.waves[currentLevel - 1][currentWave - 1].schedule(this);
 	}
 	
@@ -317,6 +344,16 @@ public class MoleGame extends GameScreen {
 		Gdx.input.setInputProcessor(gameplayInputHandler);
 	}
 	
+	private void winWave() {
+		
+		stage.addAction(Actions.delay(1.0f, new Action() {
+			public boolean act(float delta) {
+				waveSplash.message = "Molemen repelled!";
+				waveSplash.show();
+				return true;
+			}}));
+	}
+	
 	@Override
 	public void render(float delta) {
 		super.render(delta);
@@ -325,11 +362,26 @@ public class MoleGame extends GameScreen {
 		
 		// Note: keep game event-driven! Use as little switch(state)-based logic
 		// as possible
-		waveAndLevelLabel.message = String.format("Level %d:%d", currentLevel, currentWave);
+		waveAndLevelLabel.message = String.format("Level %d-%d", currentLevel, currentWave);
 		scoreLabel.message = String.format("Score: %d", score);
+		
+		if(state == State.Gameplay) {
+			if(!spawning && killedEnemies == spawnedEnemies) {
+				winWave();
+			}
+		}
 	}
 
 	public void spawnMole(Moleman moleman) {
-		addDude("gameplay", moleman);
+		addDude("molemen", moleman);
+		spawnedEnemies+=1;
+	}
+	
+	public void moleDied() {
+		killedEnemies+=1;
+	}
+
+	public void doneSpawning() {
+		spawning = false;
 	}
 }

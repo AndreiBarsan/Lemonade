@@ -15,6 +15,8 @@ public class Menu extends InputAdapter {
 	private BitmapFont font;
 	private int entryHeight;
 	private int width;
+
+	private boolean active = false;
 	
 	/**
 	 * Entry 0 is selected by default.
@@ -36,7 +38,15 @@ public class Menu extends InputAdapter {
 	}
 
 	@Override
-	public boolean keyUp(int keycode) {
+	public synchronized boolean keyUp(int keycode) {
+		//System.out.println("keyUP: active = " + active + "; thread = " + Thread.currentThread() + " this = " + this);
+		if(! active) {
+			System.out.println("Menu inactive; dropping event");
+			return false;
+		}
+		
+		System.out.println("Handling event");
+		
 		switch(keycode) {
 		case Keys.UP:
 			entries.get(index).deselected();
@@ -66,6 +76,7 @@ public class Menu extends InputAdapter {
 		case Keys.SPACE:
 		case Keys.ENTER:
 			entries.get(index).activated();
+			return true;
 		}
 		
 		return false;			
@@ -76,19 +87,23 @@ public class Menu extends InputAdapter {
 			me.show();
 		}
 	}
-	
+	 
 	protected void hide() {
 		for(MenuEntry me : entries) {
 			me.hide();
 		}
 	}
 	
-	public void activate() {
+	public synchronized void activate() {
+		active = true;
 		Gdx.input.setInputProcessor(this);
 		show();
 	}
 	
-	public void deactivate() {
+	public synchronized void deactivate() {
+		//System.out.println("Deactivated menu: Thread = " + Thread.currentThread() + " this = " + this);
+		active = false;
+		// System.out.println(active);
 		Gdx.input.setInputProcessor(null);
 		hide();
 	}

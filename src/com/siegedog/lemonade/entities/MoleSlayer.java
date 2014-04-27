@@ -7,6 +7,7 @@ import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.utils.Array;
 import com.siegedog.egglib.Dude;
+import com.siegedog.egglib.EffectDude;
 import com.siegedog.egglib.EggGame;
 import com.siegedog.egglib.physics.AABB;
 import com.siegedog.egglib.physics.Collision;
@@ -69,8 +70,9 @@ public class MoleSlayer extends Dude {
 					AABB pseudoRay = new AABB(getX() + eyeOffset.x, getY() + eyeOffset.y - pseudoRayHeight, LASER_WIDTH, pseudoRayHeight);
 					
 					Moleman top = null;
+					Collision topCol = null;
 					float maxY = -pseudoRayHeight;
-					for(Actor a : screen.getLayer("gameplay").getChildren()) {
+					for(Actor a : screen.getLayer("molemen").getChildren()) {
 						if(! (a instanceof Moleman)) continue;
 						
 						Moleman mm = (Moleman) a;
@@ -83,6 +85,7 @@ public class MoleSlayer extends Dude {
 							if(mm.getY() > maxY) {
 								maxY = mm.getY();
 								top = mm;
+								topCol = c;
 							}
 						}
 					}
@@ -92,10 +95,12 @@ public class MoleSlayer extends Dude {
 					// Deal damage to whatever we hit
 					if(null != top) {
 						top.takeDamage(getLaserDamage());
+						Vector2 topSize = top.physics.getDimensions();
+						Vector2 impactPos = new Vector2(top.getX() + topSize.x / 2.0f, top.getY() + topSize.y / 2.0f - BEAM_PENETRATION);
+						screen.addDude("effects", new EffectDude(impactPos, "blast"));
 					}
 					
-					
-					screen.addDude(new LaserBlast(pseudoRay.getX(), pseudoRay.getY() + pseudoRayHeight, -Math.abs(getY() - maxY) - BEAM_PENETRATION));
+					screen.addDude("gameplay", new LaserBlast(pseudoRay.getX(), pseudoRay.getY() + pseudoRayHeight, -Math.abs(getY() - maxY) - BEAM_PENETRATION));
 				}
 			}
 		}

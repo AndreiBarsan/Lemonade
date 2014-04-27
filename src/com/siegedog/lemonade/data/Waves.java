@@ -15,6 +15,15 @@ public class Waves {
 		public void schedule(MoleGame screen);
 	}
 	
+	private static Action done(final MoleGame screen) {
+		return new Action() {
+			public boolean act(float delta) {
+				screen.doneSpawning();
+				return true;
+			}
+		};
+	}
+	
 	private static Action spawnBasicMolemen(final MoleGame screen, final Vector2... positions) {
 		return new Action() {
 			public boolean act(float delta) {
@@ -31,7 +40,8 @@ public class Waves {
 			screen.getStage().addAction(Actions.sequence(
 				spawnBasicMolemen(screen, new Vector2(-50.0f, BOTTOM), new Vector2(RIGHT + 50.0f, BOTTOM)),
 				Actions.delay(2.0f),
-				spawnBasicMolemen(screen, new Vector2(-50.0f, BOTTOM), new Vector2(RIGHT + 50.0f, BOTTOM))
+				spawnBasicMolemen(screen, new Vector2(-50.0f, BOTTOM), new Vector2(RIGHT + 50.0f, BOTTOM)),
+				done(screen)
 			));
 		}
 	};

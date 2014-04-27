@@ -19,6 +19,9 @@ public class LemonadeGame extends EggGame {
 				r.loadFont("menuFont");
 				r.loadFont("splashFont");
 				r.loadAtlas("img/atlas/pack.atlas");
+				
+				r.loadParticleEffect("puff");
+				r.loadParticleEffect("blast");
 			}
 		};
 		
